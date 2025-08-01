@@ -60,17 +60,54 @@ def plot_results(
     ax3.axis('off')
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
     plt.show()
+
+
+def attack(
+        model, image_tensor, true_label_idx, epsilon, alpha, num_iter, device
+        ):
+    # we're going to do some projected gradient ascent with an l_infinity norm
+    model.to(device)
+    model.eval() 
+    original_tensor = image_tensor.clone().detach().to(device)
+    adv_tensor = original_tensor.clone().detach() 
+
+    # initialise noise with maximal single pixel value of plusminus epsilon
+    noise = torch.empty_like(adv_tensor).uniform_(-epsilon, epsilon)
+    adv_tensor += noise
+    adv_tensor.requires_grad_(True)
+    true_label_idx = true_label_idx.to(device)
+
+    # cross entropy since this is classification
+    loss_fn = nn.CrossEntropyLoss()
+
+    # the goal is to do gradient ascent on the loss function, essentially
+    # pushing it anywhere away from the minimum. we're just going to do fast
+    # gradient sign method with some alpha that tells you the size of the step.
+    # this is because it isn't important where we go in the landscape, so long
+    # as we go away from the minimum quickly. 
+    for _ in range(num_iter):
+        # run the adv_tensor through model
+        output = model(adv_tensor.unsqueeze(0))
+        loss = loss_fn(output, true_label_idx) 
+        # gradients
+        model.zero_grad() 
+        loss.backward() 
+        with torch.no_grad():
+            grad = adv_tensor.grad.detach() 
+            # we add not subtract here since gradient ascent
+            adv_tensor.add(grad.sign(), alpha=alpha)
+            # fix the size of the perturbation so it is at most epsilon. note we
+            # compare the adv_tensor with the original image.  
+            perturbation = torch.clamp(adv_tensor - original_tensor, min=-epsilon, max=epsilon)
+            adv_tensor = original_tensor + perturbation
+
+        adv_tensor.requires_grad_(True) 
     
+    return adv_tensor.detach() 
+
 
 if __name__=="__main__":
     dataset_idx_to_full_idx, full_imagenet_labels , idx_to_nid, imagenette_map = imagenette_setup.create_label_mapping()
-
-    sample_idx = 5
-    sample_nid = idx_to_nid[sample_idx] 
-    sample_full_idx = dataset_idx_to_full_idx[sample_idx]    
-    sample_name = imagenette_map[sample_nid]
-
-    print(f"Example: Dataset index {sample_idx} ({sample_name}) -> Full ImageNet index {sample_full_idx}")
 
     model, preprocess_transforms = get_model()
 
@@ -95,6 +132,19 @@ if __name__=="__main__":
     print(f"Model's Initial Prediction: '{original_pred[0]}' (Confidence: {original_pred[1]:.2%})\n")
 
     original_img = denormalize(image_tensor).permute(1,2,0).numpy()
-    noise = np.zeros_like(original_img)
+    # noise = np.zeros_like(original_img)
 
-    plot_results(original_img, noise, original_img, original_pred, original_pred, label_tensor)
+    # plot_results(original_img, noise, original_img, original_pred,
+    # original_pred, label_tensor)
+    
+    epsilon = 8/255
+    alpha = 2/255 
+    num_iter = 40 
+
+    adv_tensor = attack(model, image_tensor, label_tensor, epsilon, alpha, num_iter, device)
+
+    adv_pred = predict_tensor(model, adv_tensor, device, full_imagenet_labels)
+    adv_img = denormalize(adv_tensor).permute(1,2,0).numpy() 
+    noise = adv_img - original_img 
+
+    plot_results(original_img, noise, adv_img, original_pred, adv_pred, true_label_name)
