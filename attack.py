@@ -95,7 +95,7 @@ def attack(
         with torch.no_grad():
             grad = adv_tensor.grad.detach() 
             # we add not subtract here since gradient ascent
-            adv_tensor.add(grad.sign(), alpha=alpha)
+            adv_tensor.add_(grad.sign(), alpha=alpha)
             # fix the size of the perturbation so it is at most epsilon. note we
             # compare the adv_tensor with the original image.  
             perturbation = torch.clamp(adv_tensor - original_tensor, min=-epsilon, max=epsilon)
