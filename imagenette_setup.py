@@ -84,12 +84,12 @@ def create_label_mapping():
     # create a reverse map for getting the name from the dataset index
     idx_to_nid = {v: k for k, v in temp_dataset.class_to_idx.items()}
 
-    return dataset_idx_to_full_idx, full_imagenet_labels, idx_to_nid
+    return dataset_idx_to_full_idx, full_imagenet_labels, idx_to_nid, imagenette_map
     
 
 # let's run it and check
 if __name__=="__main__":
-    dataset_idx_to_full_idx, _ , idx_to_nid = create_label_mapping()
+    dataset_idx_to_full_idx, _ , idx_to_nid, imagenette_map = create_label_mapping()
 
     sample_idx = 3 
     sample_nid = idx_to_nid[sample_idx] 
